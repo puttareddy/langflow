@@ -86,6 +86,9 @@ def serialize_field(value):
         if hasattr(value, "to_json"):
             return value.to_json()
         return value.dict()
+    # Handle datetime objects
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
     return str(value)
 
 
@@ -182,10 +185,10 @@ async def log_vertex_build(
             id=vertex_id,
             valid=valid,
             params=str(params) if params else None,
-            # ugly hack to get the model dump with weird datatypes
-            data=json.loads(data.model_dump_json()),
-            # ugly hack to get the model dump with weird datatypes
-            artifacts=json.loads(json.dumps(artifacts, default=str)),
+            # Serialize data using our custom serializer
+            data=serialize_field(data),
+            # Serialize artifacts using our custom serializer
+            artifacts=serialize_field(artifacts) if artifacts else None,
         )
         async with session_getter(get_db_service()) as session:
             inserted = await crud_log_vertex_build(session, vertex_build)
@@ -208,3 +211,13 @@ def rewrite_file_path(file_path: str):
         consistent_file_path = "/".join(file_path_split)
 
     return [consistent_file_path]
+
+
+def has_output_vertex(vertices: dict[Vertex, int]):
+    return any(vertex.is_output for vertex in vertices)
+
+
+def has_chat_output(vertices: dict[Vertex, int]):
+    from langflow.graph.schema import InterfaceComponentTypes
+
+    return any(InterfaceComponentTypes.ChatOutput in vertex.id for vertex in vertices)
