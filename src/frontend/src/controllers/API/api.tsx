@@ -1,4 +1,4 @@
-import { LANGFLOW_ACCESS_TOKEN } from "@/constants/constants";
+import { IS_AUTO_LOGIN, LANGFLOW_ACCESS_TOKEN } from "@/constants/constants";
 import { useCustomApiHeaders } from "@/customization/hooks/use-custom-api-headers";
 import useAuthStore from "@/stores/authStore";
 import { useUtilityStore } from "@/stores/utilityStore";
@@ -65,22 +65,27 @@ function ApiInterceptor() {
         const isAuthenticationError =
           error?.response?.status === 403 || error?.response?.status === 401;
 
-        if (isAuthenticationError) {
-          if (autoLogin !== undefined && !autoLogin) {
-            if (error?.config?.url?.includes("github")) {
-              return Promise.reject(error);
-            }
-            const stillRefresh = checkErrorCount();
-            if (!stillRefresh) {
-              return Promise.reject(error);
-            }
+        const shouldRetryRefresh =
+          (isAuthenticationError && !IS_AUTO_LOGIN) ||
+          (isAuthenticationError && !autoLogin && autoLogin !== undefined);
 
-            await tryToRenewAccessToken(error);
+        if (shouldRetryRefresh) {
+          if (
+            error?.config?.url?.includes("github") ||
+            error?.config?.url?.includes("public")
+          ) {
+            return Promise.reject(error);
+          }
+          const stillRefresh = checkErrorCount();
+          if (!stillRefresh) {
+            return Promise.reject(error);
+          }
 
-            const accessToken = cookies.get(LANGFLOW_ACCESS_TOKEN);
-            if (!accessToken && error?.config?.url?.includes("login")) {
-              return Promise.reject(error);
-            }
+          await tryToRenewAccessToken(error);
+
+          const accessToken = cookies.get(LANGFLOW_ACCESS_TOKEN);
+          if (!accessToken && error?.config?.url?.includes("login")) {
+            return Promise.reject(error);
           }
         }
 
